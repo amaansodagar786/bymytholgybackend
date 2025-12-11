@@ -17,6 +17,7 @@ connectDB();
 
 // ====== IMPORTANT: Static files BEFORE routes ======
 app.use("/products", express.static(path.join(__dirname, "products")));
+app.use("/categories", express.static(path.join(__dirname, "categories")));
 
 // ROUTES IMPORT
 const userRoutes = require("./routes/user");
@@ -27,6 +28,7 @@ const inventoryRoutes = require("./routes/inventory");
 const productOffersRoutes = require("./routes/productoffers");
 const wishlistRoutes = require("./routes/wishlist");
 const cartRoutes = require("./routes/cart");
+const profileRoutes = require("./routes/profile");
 
 
 
@@ -40,6 +42,7 @@ app.use("/inventory", inventoryRoutes);
 app.use("/productoffers", productOffersRoutes);
 app.use("/wishlist", wishlistRoutes);
 app.use("/cart", cartRoutes);
+app.use("/profile", profileRoutes);
 
 
 
