@@ -29,6 +29,8 @@ const productOffersRoutes = require("./routes/productoffers");
 const wishlistRoutes = require("./routes/wishlist");
 const cartRoutes = require("./routes/cart");
 const profileRoutes = require("./routes/profile");
+const buynowRoutes = require("./routes/buynow");
+const orderRoutes = require("./routes/order");
 
 
 
@@ -43,6 +45,8 @@ app.use("/productoffers", productOffersRoutes);
 app.use("/wishlist", wishlistRoutes);
 app.use("/cart", cartRoutes);
 app.use("/profile", profileRoutes);
+app.use("/buynow", buynowRoutes);
+app.use("/orders", orderRoutes);
 
 
 
