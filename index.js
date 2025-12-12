@@ -32,6 +32,8 @@ const profileRoutes = require("./routes/profile");
 const buynowRoutes = require("./routes/buynow");
 const orderRoutes = require("./routes/order");
 const reviewRoutes = require('./routes/reviews');
+const adminDashboardRoutes = require('./routes/adminDashboard');
+
 
 
 
@@ -49,6 +51,8 @@ app.use("/profile", profileRoutes);
 app.use("/buynow", buynowRoutes);
 app.use("/orders", orderRoutes);
 app.use('/reviews', reviewRoutes);
+app.use('/admin', adminDashboardRoutes);
+
 
 
 
