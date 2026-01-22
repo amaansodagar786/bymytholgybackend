@@ -75,6 +75,11 @@ const InventorySchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  fragrance: {  // NEW FIELD: Added for fragrance tracking
+    type: String,
+    required: true,
+    default: "Default"
+  },
   
   // Current stock
   stock: {
@@ -110,12 +115,13 @@ const InventorySchema = new mongoose.Schema({
   },
 });
 
-// Compound index for unique combination
+// Compound index for unique combination - UPDATED with fragrance
 InventorySchema.index(
   {
     productId: 1,
     variableModelId: 1,
-    colorId: 1
+    colorId: 1,
+    fragrance: 1  // Added fragrance to unique index
   },
   { unique: true, sparse: true }
 );

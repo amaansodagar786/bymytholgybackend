@@ -67,6 +67,7 @@ const WishlistSchema = new mongoose.Schema({
 
     // Size if selected
     selectedSize: String,
+    selectedFragrance: String,
 
     // Metadata
     addedFrom: {

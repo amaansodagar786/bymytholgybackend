@@ -20,7 +20,7 @@ const ColorSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  sizes: [String],
+  fragrances: [String], // Changed from sizes to fragrances
   images: [String], // Array of image URLs
   originalPrice: {
     type: Number,
@@ -84,9 +84,9 @@ const ProductSchema = new mongoose.Schema({
     sparse: true,
   },
   specifications: [SpecificationSchema],
-  colors: [ColorSchema],
+  colors: [ColorSchema], // Only one color with "Default" name
 
-  // Variable product fields
+  // Variable product fields (keeping for future)
   models: [ModelSchema],
 
   // Common fields

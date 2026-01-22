@@ -4,10 +4,10 @@ const Inventory = require("../modals/Inventory");
 const Product = require("../modals/Product");
 const { adminAuth } = require("../middleware/auth");
 
-// GET all inventory with product details
+// ========== GET ALL INVENTORY (Updated for fragrance) ==========
 router.get("/all", async (req, res) => {
   try {
-    // Get all inventory ntries
+    // Get all inventory entries
     const inventory = await Inventory.find({ isActive: true })
       .sort({ updatedAt: -1 });
 
@@ -40,9 +40,9 @@ router.get("/all", async (req, res) => {
 
       let productImage = "";
 
-      // Find the first image for this color
+      // For simple products (our fragrance-based system)
       if (product.type === "simple") {
-        // For simple products, look in product.colors
+        // Find the color (always "Default") and its images
         const color = product.colors?.find(c => c.colorId === item.colorId);
         if (color && color.images && color.images.length > 0) {
           productImage = color.images[0];
@@ -50,7 +50,7 @@ router.get("/all", async (req, res) => {
           productImage = product.thumbnailImage;
         }
       } else if (product.type === "variable") {
-        // For variable products, look in product.models
+        // For variable products (future use)
         if (product.models) {
           for (const model of product.models) {
             if (model.modelName === item.variableModelName) {
@@ -76,7 +76,9 @@ router.get("/all", async (req, res) => {
           type: product.type,
           thumbnail: product.thumbnailImage,
           hsnCode: product.hsnCode,
-          categoryName: product.categoryName
+          categoryName: product.categoryName,
+          // Add fragrance-related info from product
+          fragrances: product.colors?.[0]?.fragrances || []
         }
       };
     });
@@ -88,7 +90,7 @@ router.get("/all", async (req, res) => {
   }
 });
 
-// ADD stock to inventory item
+// ========== ADD STOCK (Works with fragrance) ==========
 router.put("/add-stock/:inventoryId", adminAuth, async (req, res) => {
   try {
     const { inventoryId } = req.params;
@@ -99,7 +101,7 @@ router.put("/add-stock/:inventoryId", adminAuth, async (req, res) => {
       return res.status(400).json({ error: "Quantity must be a positive number" });
     }
 
-    // Get inventory item
+    // Get inventory item (includes fragrance)
     const inventory = await Inventory.findById(inventoryId);
     if (!inventory) {
       return res.status(404).json({ error: "Inventory item not found" });
@@ -119,11 +121,12 @@ router.put("/add-stock/:inventoryId", adminAuth, async (req, res) => {
     await inventory.save();
 
     res.json({
-      message: `Successfully added ${quantity} stock`,
+      message: `Successfully added ${quantity} stock to ${inventory.fragrance} fragrance`,
       inventory: {
         _id: inventory._id,
         productName: inventory.productName,
         colorName: inventory.colorName,
+        fragrance: inventory.fragrance,
         previousStock: inventory.stockHistory[inventory.stockHistory.length - 2]?.newStock || 0,
         newStock: inventory.stock,
         addedQuantity: quantity
@@ -135,7 +138,7 @@ router.put("/add-stock/:inventoryId", adminAuth, async (req, res) => {
   }
 });
 
-// DEDUCT stock from inventory item
+// ========== DEDUCT STOCK (Works with fragrance) ==========
 router.put("/deduct-stock/:inventoryId", adminAuth, async (req, res) => {
   try {
     const { inventoryId } = req.params;
@@ -146,7 +149,7 @@ router.put("/deduct-stock/:inventoryId", adminAuth, async (req, res) => {
       return res.status(400).json({ error: "Quantity must be a positive number" });
     }
 
-    // Get inventory item
+    // Get inventory item (includes fragrance)
     const inventory = await Inventory.findById(inventoryId);
     if (!inventory) {
       return res.status(404).json({ error: "Inventory item not found" });
@@ -155,7 +158,7 @@ router.put("/deduct-stock/:inventoryId", adminAuth, async (req, res) => {
     // Check if enough stock is available
     if (inventory.stock < quantity) {
       return res.status(400).json({
-        error: `Not enough stock. Available: ${inventory.stock}, Requested: ${quantity}`
+        error: `Not enough stock for ${inventory.fragrance} fragrance. Available: ${inventory.stock}, Requested: ${quantity}`
       });
     }
 
@@ -173,11 +176,12 @@ router.put("/deduct-stock/:inventoryId", adminAuth, async (req, res) => {
     await inventory.save();
 
     res.json({
-      message: `Successfully deducted ${quantity} stock`,
+      message: `Successfully deducted ${quantity} stock from ${inventory.fragrance} fragrance`,
       inventory: {
         _id: inventory._id,
         productName: inventory.productName,
         colorName: inventory.colorName,
+        fragrance: inventory.fragrance,
         previousStock: inventory.stockHistory[inventory.stockHistory.length - 2]?.newStock || 0,
         newStock: inventory.stock,
         deductedQuantity: quantity
@@ -189,7 +193,7 @@ router.put("/deduct-stock/:inventoryId", adminAuth, async (req, res) => {
   }
 });
 
-// SET stock to specific value
+// ========== SET STOCK (Works with fragrance) ==========
 router.put("/set-stock/:inventoryId", adminAuth, async (req, res) => {
   try {
     const { inventoryId } = req.params;
@@ -200,7 +204,7 @@ router.put("/set-stock/:inventoryId", adminAuth, async (req, res) => {
       return res.status(400).json({ error: "Stock must be a positive number or zero" });
     }
 
-    // Get inventory item
+    // Get inventory item (includes fragrance)
     const inventory = await Inventory.findById(inventoryId);
     if (!inventory) {
       return res.status(404).json({ error: "Inventory item not found" });
@@ -220,11 +224,12 @@ router.put("/set-stock/:inventoryId", adminAuth, async (req, res) => {
     await inventory.save();
 
     res.json({
-      message: `Stock set to ${stock}`,
+      message: `Stock set to ${stock} for ${inventory.fragrance} fragrance`,
       inventory: {
         _id: inventory._id,
         productName: inventory.productName,
         colorName: inventory.colorName,
+        fragrance: inventory.fragrance,
         previousStock: inventory.stockHistory[inventory.stockHistory.length - 2]?.newStock || 0,
         newStock: inventory.stock
       }
@@ -235,7 +240,7 @@ router.put("/set-stock/:inventoryId", adminAuth, async (req, res) => {
   }
 });
 
-// UPDATE threshold for inventory item
+// ========== UPDATE THRESHOLD (Works with fragrance) ==========
 router.put("/update-threshold/:inventoryId", adminAuth, async (req, res) => {
   try {
     const { inventoryId } = req.params;
@@ -269,7 +274,7 @@ router.put("/update-threshold/:inventoryId", adminAuth, async (req, res) => {
   }
 });
 
-// BULK ADD stock
+// ========== BULK ADD STOCK (Works with fragrance) ==========
 router.put("/bulk-add-stock", adminAuth, async (req, res) => {
   try {
     const { updates } = req.body;
@@ -309,6 +314,7 @@ router.put("/bulk-add-stock", adminAuth, async (req, res) => {
           inventoryId,
           productName: inventory.productName,
           colorName: inventory.colorName,
+          fragrance: inventory.fragrance, // Added fragrance
           addedQuantity: quantity,
           newStock: inventory.stock
         });
@@ -330,14 +336,14 @@ router.put("/bulk-add-stock", adminAuth, async (req, res) => {
   }
 });
 
-// GET stock history for inventory item
+// ========== GET STOCK HISTORY (Works with fragrance) ==========
 router.get("/stock-history/:inventoryId", adminAuth, async (req, res) => {
   try {
     const { inventoryId } = req.params;
     const { limit = 50, page = 1 } = req.query;
 
     const inventory = await Inventory.findById(inventoryId)
-      .select("stockHistory productName colorName modelName variableModelName");
+      .select("stockHistory productName colorName modelName variableModelName fragrance");
 
     if (!inventory) {
       return res.status(404).json({ error: "Inventory item not found" });
@@ -356,6 +362,7 @@ router.get("/stock-history/:inventoryId", adminAuth, async (req, res) => {
     res.json({
       productName: inventory.productName,
       colorName: inventory.colorName,
+      fragrance: inventory.fragrance, // Added fragrance
       modelName: inventory.modelName,
       variableModelName: inventory.variableModelName,
       currentStock: inventory.stock,
@@ -371,7 +378,7 @@ router.get("/stock-history/:inventoryId", adminAuth, async (req, res) => {
   }
 });
 
-// GET low stock items (stock < threshold)
+// ========== GET LOW STOCK ITEMS (Works with fragrance) ==========
 router.get("/low-stock", adminAuth, async (req, res) => {
   try {
     const lowStockItems = await Inventory.find({
@@ -386,7 +393,7 @@ router.get("/low-stock", adminAuth, async (req, res) => {
   }
 });
 
-// GET inventory by product ID
+// ========== GET INVENTORY BY PRODUCT ID (Updated for fragrance) ==========
 router.get("/product/:productId", adminAuth, async (req, res) => {
   try {
     const { productId } = req.params;
@@ -394,14 +401,18 @@ router.get("/product/:productId", adminAuth, async (req, res) => {
     const inventory = await Inventory.find({
       productId,
       isActive: true
-    }).sort({ colorName: 1 });
+    }).sort({ fragrance: 1 }); // Sort by fragrance
 
     // Get product for additional details
     const product = await Product.findOne({ productId, isActive: true });
 
+    // Get all fragrances from product
+    const productFragrances = product?.colors?.[0]?.fragrances || [];
+
     res.json({
       product,
       inventory,
+      fragrances: productFragrances,
       count: inventory.length
     });
   } catch (err) {
@@ -410,13 +421,11 @@ router.get("/product/:productId", adminAuth, async (req, res) => {
   }
 });
 
-
-// Add this to your inventory routes (routes/inventory.js)
-// GET inventory status for a specific product variant
+// ========== GET INVENTORY STATUS (Updated for fragrance) ==========
 router.get('/product/:productId/status', async (req, res) => {
   try {
     const { productId } = req.params;
-    const { colorId, modelId } = req.query;
+    const { colorId, fragrance, modelId } = req.query;
 
     let query = {
       productId,
@@ -424,6 +433,7 @@ router.get('/product/:productId/status', async (req, res) => {
     };
 
     if (colorId) query.colorId = colorId;
+    if (fragrance) query.fragrance = fragrance;
     if (modelId) query.variableModelId = modelId;
 
     const inventoryItem = await Inventory.findOne(query);
@@ -433,7 +443,8 @@ router.get('/product/:productId/status', async (req, res) => {
         stock: 0,
         threshold: 10,
         status: 'out-of-stock',
-        message: 'Inventory not found'
+        message: 'Inventory not found',
+        fragrance: fragrance || "Default"
       });
     }
 
@@ -450,6 +461,7 @@ router.get('/product/:productId/status', async (req, res) => {
       threshold: inventoryItem.threshold,
       status: status,
       colorName: inventoryItem.colorName,
+      fragrance: inventoryItem.fragrance,
       modelName: inventoryItem.variableModelName || inventoryItem.modelName
     });
 
@@ -459,5 +471,123 @@ router.get('/product/:productId/status', async (req, res) => {
   }
 });
 
+// ========== NEW: GET INVENTORY BY FRAGRANCE ==========
+router.get("/product/:productId/fragrance/:fragrance", adminAuth, async (req, res) => {
+  try {
+    const { productId, fragrance } = req.params;
+
+    const inventoryItem = await Inventory.findOne({
+      productId,
+      fragrance,
+      isActive: true
+    });
+
+    if (!inventoryItem) {
+      return res.status(404).json({
+        message: "Inventory not found for this fragrance",
+        productId,
+        fragrance
+      });
+    }
+
+    res.json(inventoryItem);
+  } catch (err) {
+    console.error("Error fetching inventory by fragrance:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== NEW: BULK UPDATE FRAGRANCE STOCK ==========
+router.put("/bulk-update-fragrance-stock", adminAuth, async (req, res) => {
+  try {
+    const { productId, colorId, updates } = req.body;
+
+    if (!productId || !colorId || !Array.isArray(updates)) {
+      return res.status(400).json({ error: "productId, colorId, and updates array are required" });
+    }
+
+    const adminEmail = req.admin?.email || "admin";
+    const results = [];
+    const errors = [];
+
+    for (const update of updates) {
+      try {
+        const { fragrance, quantity, operation, reason, notes } = update;
+
+        if (!fragrance || !quantity || quantity <= 0 || !operation) {
+          errors.push({ fragrance, error: "Invalid data" });
+          continue;
+        }
+
+        // Find inventory item by fragrance
+        const inventoryItem = await Inventory.findOne({
+          productId,
+          colorId,
+          fragrance,
+          isActive: true
+        });
+
+        if (!inventoryItem) {
+          errors.push({ fragrance, error: "Inventory not found" });
+          continue;
+        }
+
+        // Perform operation
+        if (operation === "add") {
+          inventoryItem.addStock(
+            parseFloat(quantity),
+            reason || "Bulk stock addition",
+            notes || "",
+            adminEmail
+          );
+        } else if (operation === "deduct") {
+          if (inventoryItem.stock < quantity) {
+            errors.push({
+              fragrance,
+              error: `Not enough stock. Available: ${inventoryItem.stock}, Requested: ${quantity}`
+            });
+            continue;
+          }
+          inventoryItem.deductStock(
+            parseFloat(quantity),
+            reason || "Bulk stock deduction",
+            notes || "",
+            adminEmail
+          );
+        } else if (operation === "set") {
+          inventoryItem.setStock(
+            parseFloat(quantity),
+            reason || "Bulk stock set",
+            notes || "",
+            adminEmail
+          );
+        }
+
+        await inventoryItem.save();
+        results.push({
+          fragrance,
+          operation,
+          quantity,
+          newStock: inventoryItem.stock
+        });
+      } catch (err) {
+        errors.push({ fragrance: update.fragrance, error: err.message });
+      }
+    }
+
+    res.json({
+      message: "Bulk fragrance stock update completed",
+      productId,
+      colorId,
+      results,
+      errors,
+      successful: results.length,
+      failed: errors.length
+    });
+  } catch (err) {
+    console.error("Error in bulk fragrance stock update:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 module.exports = router;

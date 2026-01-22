@@ -15,6 +15,7 @@ router.post('/create-checkout-session', auth, async (req, res) => {
       finalPrice,
       totalPrice,
       selectedColor,
+      selectedFragrance,  // ADD THIS
       selectedSize,
       selectedModel,
       hasOffer,
@@ -23,7 +24,6 @@ router.post('/create-checkout-session', auth, async (req, res) => {
     } = req.body;
 
     // Create a temporary checkout session
-    // You might want to store this in Redis or session
     const checkoutSession = {
       type: 'buy-now',
       userId,
@@ -35,6 +35,7 @@ router.post('/create-checkout-session', auth, async (req, res) => {
         finalPrice,
         totalPrice,
         selectedColor,
+        selectedFragrance,  // ADD THIS
         selectedSize,
         selectedModel,
         hasOffer,
@@ -42,7 +43,7 @@ router.post('/create-checkout-session', auth, async (req, res) => {
         thumbnailImage: thumbnailImage || selectedColor?.images?.[0] || null,
         productSKU: selectedModel?.SKU || null,
         inStock: true,
-        _id: `temp_${Date.now()}`, // Temporary ID
+        _id: `temp_${Date.now()}`,
         addedAt: new Date()
       }],
       createdAt: new Date(),
@@ -74,7 +75,5 @@ router.post('/create-checkout-session', auth, async (req, res) => {
     });
   }
 });
-
-
 
 module.exports = router;

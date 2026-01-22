@@ -174,6 +174,7 @@ router.post("/add", auth, async (req, res) => {
             originalPrice,
             currentPrice, // ✅ This is now guaranteed to have a value
             selectedColor: selectedColor || null,
+            selectedFragrance: req.body.selectedFragrance || null,
             selectedModel: selectedModel || null,
             selectedSize: selectedSize || null,
             addedFrom,

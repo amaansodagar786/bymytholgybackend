@@ -50,6 +50,7 @@ const CartItemSchema = new mongoose.Schema({
     // Variant selections
     selectedModel: SelectedModelSchema,
     selectedColor: SelectedColorSchema,
+    selectedFragrance: String,  // ADD THIS LINE
     selectedSize: String,
 
     // Pricing

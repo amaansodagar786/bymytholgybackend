@@ -9,7 +9,7 @@ router.get('/:userId', auth, async (req, res) => {
   try {
     const cartItems = await Cart.find({ userId: req.params.userId })
       .sort({ addedAt: -1 });
-    
+
     // Calculate cart summary
     const summary = cartItems.reduce((acc, item) => {
       acc.totalItems += item.quantity;
@@ -17,7 +17,7 @@ router.get('/:userId', auth, async (req, res) => {
       acc.totalSavings += (item.hasOffer && item.offerDetails?.savedAmount) ? item.offerDetails.savedAmount : 0;
       return acc;
     }, { totalItems: 0, subtotal: 0, totalSavings: 0 });
-    
+
     res.json({ cartItems, summary });
   } catch (error) {
     console.error('Error fetching cart:', error);
@@ -37,6 +37,7 @@ router.post('/add', auth, async (req, res) => {
       finalPrice,
       totalPrice,
       selectedColor,
+      selectedFragrance,  // ADD THIS
       selectedSize,
       selectedModel,
       hasOffer,
@@ -49,6 +50,7 @@ router.post('/add', auth, async (req, res) => {
       productId,
       'selectedModel.modelId': selectedModel?.modelId || null,
       'selectedColor.colorId': selectedColor?.colorId || null,
+      selectedFragrance: selectedFragrance || null,  // ADD THIS FOR COMPARISON
       selectedSize: selectedSize || null
     });
 
@@ -56,16 +58,16 @@ router.post('/add', auth, async (req, res) => {
       // Update quantity if same variant exists
       existingCartItem.quantity += quantity;
       existingCartItem.totalPrice = existingCartItem.quantity * existingCartItem.finalPrice;
-      
+
       if (existingCartItem.hasOffer && existingCartItem.offerDetails) {
-        existingCartItem.offerDetails.savedAmount = 
+        existingCartItem.offerDetails.savedAmount =
           (existingCartItem.unitPrice - existingCartItem.finalPrice) * existingCartItem.quantity;
       }
-      
+
       await existingCartItem.save();
-      return res.json({ 
-        message: 'Cart updated successfully', 
-        cartItem: existingCartItem 
+      return res.json({
+        message: 'Cart updated successfully',
+        cartItem: existingCartItem
       });
     }
 
@@ -79,6 +81,7 @@ router.post('/add', auth, async (req, res) => {
       finalPrice,
       totalPrice,
       selectedColor,
+      selectedFragrance,  // ADD THIS
       selectedSize,
       selectedModel,
       hasOffer,
@@ -89,14 +92,14 @@ router.post('/add', auth, async (req, res) => {
     });
 
     await cartItem.save();
-    
+
     // Get updated cart count
     const cartCount = await Cart.countDocuments({ userId });
-    
-    res.status(201).json({ 
-      message: 'Added to cart successfully', 
+
+    res.status(201).json({
+      message: 'Added to cart successfully',
       cartItem,
-      cartCount 
+      cartCount
     });
   } catch (error) {
     console.error('Error adding to cart:', error);
@@ -108,7 +111,7 @@ router.post('/add', auth, async (req, res) => {
 router.put('/update/:itemId', auth, async (req, res) => {
   try {
     const { quantity } = req.body;
-    
+
     const cartItem = await Cart.findById(req.params.itemId);
     if (!cartItem) {
       return res.status(404).json({ message: 'Cart item not found' });
@@ -116,12 +119,12 @@ router.put('/update/:itemId', auth, async (req, res) => {
 
     // FIXED: Just verify the item exists and belongs to someone
     // We don't have req.user.userId, so we can't do ownership check
-    
+
     cartItem.quantity = quantity;
     cartItem.totalPrice = cartItem.finalPrice * quantity;
-    
+
     if (cartItem.hasOffer && cartItem.offerDetails) {
-      cartItem.offerDetails.savedAmount = 
+      cartItem.offerDetails.savedAmount =
         (cartItem.unitPrice - cartItem.finalPrice) * quantity;
     }
 
@@ -142,15 +145,15 @@ router.delete('/remove/:itemId', auth, async (req, res) => {
     }
 
     // FIXED: Skip ownership check since we don't have req.user.userId
-    
+
     await cartItem.deleteOne();
-    
+
     // Get updated cart count
     const cartCount = await Cart.countDocuments({ userId: cartItem.userId });
-    
-    res.json({ 
-      message: 'Removed from cart', 
-      cartCount 
+
+    res.json({
+      message: 'Removed from cart',
+      cartCount
     });
   } catch (error) {
     console.error('Error removing cart item:', error);

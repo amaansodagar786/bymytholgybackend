@@ -20,6 +20,13 @@ const OrderItemSchema = new mongoose.Schema({
         required: true
     },
 
+    // Fragrance info - ADDED
+    fragrance: {
+        type: String,
+        required: true,
+        default: "Default"
+    },
+
     // Model info
     modelId: {
         type: String,
@@ -219,6 +226,7 @@ const OrderSchema = new mongoose.Schema({
 OrderSchema.index({ userId: 1, createdAt: -1 });
 OrderSchema.index({ orderId: 1 });
 OrderSchema.index({ 'items.productId': 1 });
+OrderSchema.index({ 'items.fragrance': 1 }); // ADDED: Index for fragrance
 OrderSchema.index({ orderStatus: 1 });
 
 // Virtual for total items count

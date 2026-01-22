@@ -7,7 +7,7 @@ const ProductOffer = require('../modals/ProductOffers');
 const Inventory = require('../modals/Inventory');
 const { auth } = require('../middleware/auth');
 
-// 📦 CREATE ORDER (from checkout)
+// 📦 CREATE ORDER (from checkout) - UPDATED FOR FRAGRANCE
 router.post('/create', auth, async (req, res) => {
     try {
         const userId = req.body.userId; // From frontend
@@ -56,10 +56,14 @@ router.post('/create', auth, async (req, res) => {
                     });
                 }
 
-                // 2. Find inventory
+                // Get fragrance from item data
+                const fragrance = item.selectedFragrance || "Default";
+
+                // 2. Find inventory WITH FRAGRANCE
                 const inventoryQuery = {
                     productId: item.productId,
-                    colorId: item.selectedColor.colorId
+                    colorId: item.selectedColor.colorId,
+                    fragrance: fragrance // ADDED: Include fragrance in query
                 };
 
                 if (item.selectedModel?.modelId) {
@@ -71,7 +75,7 @@ router.post('/create', auth, async (req, res) => {
                 if (!inventory) {
                     return res.status(400).json({
                         success: false,
-                        message: `Inventory not found for ${item.productName}`
+                        message: `Inventory not found for ${item.productName} - ${fragrance} fragrance`
                     });
                 }
 
@@ -79,11 +83,11 @@ router.post('/create', auth, async (req, res) => {
                 if (inventory.stock < item.quantity) {
                     return res.status(400).json({
                         success: false,
-                        message: `Insufficient stock for ${item.productName}. Available: ${inventory.stock}`
+                        message: `Insufficient stock for ${item.productName} (${fragrance}). Available: ${inventory.stock}`
                     });
                 }
 
-                // 4. Find active offer
+                // 4. Find active offer (offer is color-based, not fragrance-based)
                 let currentOffer = null;
                 if (item.selectedColor?.colorId) {
                     const offerQuery = {
@@ -120,12 +124,13 @@ router.post('/create', auth, async (req, res) => {
                 subtotal += unitPrice * item.quantity;
                 totalSavings += itemSavings;
 
-                // 6. Create order item
+                // 6. Create order item WITH FRAGRANCE
                 const orderItem = {
                     productId: item.productId,
                     productName: item.productName,
                     colorId: item.selectedColor.colorId,
                     colorName: item.selectedColor.colorName,
+                    fragrance: fragrance, // ADDED: Store fragrance
                     modelId: item.selectedModel?.modelId || "",
                     modelName: item.selectedModel?.modelName || "Default",
                     size: item.selectedSize || "",
@@ -144,7 +149,7 @@ router.post('/create', auth, async (req, res) => {
 
                 validatedItems.push(orderItem);
 
-                // 7. Deduct stock
+                // 7. Deduct stock FROM SPECIFIC FRAGRANCE INVENTORY
                 await inventory.deductStock(
                     item.quantity,
                     "Order placed",
@@ -152,6 +157,8 @@ router.post('/create', auth, async (req, res) => {
                     userId
                 );
                 await inventory.save();
+
+                console.log(`✅ Stock deducted for ${item.productName} - ${fragrance}`);
 
             } catch (error) {
                 console.error('Error processing item:', error);
@@ -222,7 +229,13 @@ router.post('/create', auth, async (req, res) => {
                 deliveryAddress: order.deliveryAddress,
                 payment: order.payment,
                 timeline: order.timeline,
-                orderStatus: order.orderStatus
+                orderStatus: order.orderStatus,
+                items: order.items.map(item => ({
+                    productName: item.productName,
+                    fragrance: item.fragrance,
+                    quantity: item.quantity,
+                    totalPrice: item.totalPrice
+                }))
             }
         });
 
@@ -406,7 +419,7 @@ router.get('/stats/:userId', auth, async (req, res) => {
     }
 });
 
-// ✏️ UPDATE ORDER STATUS (user cancellation)
+// ✏️ UPDATE ORDER STATUS (user cancellation) - UPDATED FOR FRAGRANCE
 router.put('/:orderId/status', auth, async (req, res) => {
     try {
         const { orderId } = req.params;
@@ -436,9 +449,12 @@ router.put('/:orderId/status', auth, async (req, res) => {
         if (status === 'cancelled') {
             order.timeline.cancelledAt = new Date();
 
-            // Restore stock if cancelled
+            // Restore stock to specific fragrance inventory
             for (const item of order.items) {
-                const inventory = await Inventory.findOne({ inventoryId: item.inventoryId });
+                const inventory = await Inventory.findOne({ 
+                    inventoryId: item.inventoryId 
+                });
+                
                 if (inventory) {
                     await inventory.addStock(
                         item.quantity,
@@ -447,6 +463,8 @@ router.put('/:orderId/status', auth, async (req, res) => {
                         order.userId
                     );
                     await inventory.save();
+                    
+                    console.log(`✅ Stock restored for ${item.productName} - ${item.fragrance}`);
                 }
             }
         } else if (status === 'delivered') {
@@ -473,7 +491,7 @@ router.put('/:orderId/status', auth, async (req, res) => {
     }
 });
 
-// ❌ CANCEL ORDER (user request)
+// ❌ CANCEL ORDER (user request) - UPDATED FOR FRAGRANCE
 router.put('/:orderId/cancel', auth, async (req, res) => {
     try {
         const { orderId } = req.params;
@@ -500,9 +518,12 @@ router.put('/:orderId/cancel', auth, async (req, res) => {
         order.timeline.cancelledAt = new Date();
         order.notes = reason ? `Cancelled by user: ${reason}` : 'Cancelled by user';
 
-        // Restore stock
+        // Restore stock to specific fragrance inventory
         for (const item of order.items) {
-            const inventory = await Inventory.findOne({ inventoryId: item.inventoryId });
+            const inventory = await Inventory.findOne({ 
+                inventoryId: item.inventoryId 
+            });
+            
             if (inventory) {
                 await inventory.addStock(
                     item.quantity,
@@ -511,6 +532,8 @@ router.put('/:orderId/cancel', auth, async (req, res) => {
                     order.userId
                 );
                 await inventory.save();
+                
+                console.log(`✅ Stock restored for ${item.productName} - ${item.fragrance}`);
             }
         }
 
@@ -555,8 +578,6 @@ router.get('/recent/:userId', auth, async (req, res) => {
         });
     }
 });
-
-
 
 // 👑 ADMIN: GET ALL ORDERS (with filters and pagination)
 router.get('/all/orders', async (req, res) => {
@@ -644,7 +665,7 @@ router.get('/all/orders', async (req, res) => {
             { $sort: { count: -1 } }
         ]);
 
-        // Get top products
+        // Get top products WITH FRAGRANCE
         const topProducts = await Order.aggregate([
             { $match: query },
             { $unwind: "$items" },
@@ -652,7 +673,8 @@ router.get('/all/orders', async (req, res) => {
                 $group: {
                     _id: {
                         productId: "$items.productId",
-                        productName: "$items.productName"
+                        productName: "$items.productName",
+                        fragrance: "$items.fragrance" // ADDED: Group by fragrance
                     },
                     totalSold: { $sum: "$items.quantity" },
                     totalRevenue: { $sum: "$items.totalPrice" }
@@ -700,4 +722,5 @@ router.get('/all/orders', async (req, res) => {
         });
     }
 });
+
 module.exports = router;
