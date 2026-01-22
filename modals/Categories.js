@@ -1,4 +1,3 @@
-// modals/Categories.js
 const mongoose = require("mongoose");
 const { v4: uuidv4 } = require("uuid");
 
@@ -13,17 +12,22 @@ const categorySchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
+      trim: true
     },
     image: {
-      type: String, // Store image URL
+      type: String,
       default: ""
     },
     imageFilename: {
-      type: String, // Store the actual filename for deletion if needed
+      type: String,
       default: ""
     }
+    // Note: Keeping image fields in schema for backward compatibility
+    // but they won't be used anymore
   },
-  { timestamps: true }
+  { 
+    timestamps: true 
+  }
 );
 
 module.exports = mongoose.model("Category", categorySchema);

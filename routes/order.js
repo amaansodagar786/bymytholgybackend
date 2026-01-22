@@ -7,6 +7,124 @@ const ProductOffer = require('../modals/ProductOffers');
 const Inventory = require('../modals/Inventory');
 const { auth } = require('../middleware/auth');
 
+
+
+// 📋 GET USER'S ORDERS
+router.get('/user/:userId', auth, async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const {
+            page = 1,
+            limit = 10,
+            status
+        } = req.query;
+
+        const query = { userId };
+        if (status && status !== 'all') {
+            query.orderStatus = status;
+        }
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        const orders = await Order.find(query)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(parseInt(limit));
+
+        // Fetch product images for each order item
+        const enhancedOrders = await Promise.all(
+            orders.map(async (order) => {
+                const itemsWithImages = await Promise.all(
+                    order.items.map(async (item) => {
+                        try {
+                            // Find product to get thumbnail
+                            const product = await Product.findOne({
+                                productId: item.productId
+                            }).select('thumbnailImage');
+
+                            // Find the specific color to get its images
+                            let colorImages = [];
+                            let fragrance = item.fragrance || "";
+
+                            if (product) {
+                                if (product.type === "simple") {
+                                    // For simple products, check colors array
+                                    const colorObj = product.colors?.find(
+                                        c => c.colorId === item.colorId
+                                    );
+                                    if (colorObj) {
+                                        colorImages = colorObj.images || [];
+                                        fragrance = colorObj.fragrances?.[0] || fragrance;
+                                    }
+                                } else if (product.type === "variable") {
+                                    // For variable products, check models and colors
+                                    for (const model of product.models || []) {
+                                        const colorObj = model.colors?.find(
+                                            c => c.colorId === item.colorId
+                                        );
+                                        if (colorObj) {
+                                            colorImages = colorObj.images || [];
+                                            fragrance = colorObj.fragrances?.[0] || fragrance;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                            return {
+                                ...item.toObject(),
+                                productImage: colorImages[0] || product?.thumbnailImage || null,
+                                fragrance: fragrance
+                            };
+                        } catch (err) {
+                            console.error('Error fetching product image:', err);
+                            return {
+                                ...item.toObject(),
+                                productImage: null,
+                                fragrance: item.fragrance || ""
+                            };
+                        }
+                    })
+                );
+
+                return {
+                    ...order.toObject(),
+                    items: itemsWithImages
+                };
+            })
+        );
+
+        const total = await Order.countDocuments(query);
+
+        // Calculate summary
+        const summary = {
+            totalOrders: total,
+            pendingOrders: await Order.countDocuments({ userId, orderStatus: 'pending' }),
+            deliveredOrders: await Order.countDocuments({ userId, orderStatus: 'delivered' }),
+            cancelledOrders: await Order.countDocuments({ userId, orderStatus: 'cancelled' })
+        };
+
+        res.json({
+            success: true,
+            orders: enhancedOrders,
+            summary,
+            pagination: {
+                total,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                pages: Math.ceil(total / parseInt(limit))
+            }
+        });
+
+    } catch (error) {
+        console.error('Error fetching orders:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch orders'
+        });
+    }
+});
+
 // 📦 CREATE ORDER (from checkout) - UPDATED FOR FRAGRANCE
 router.post('/create', auth, async (req, res) => {
     try {
@@ -249,59 +367,6 @@ router.post('/create', auth, async (req, res) => {
     }
 });
 
-// 📋 GET USER'S ORDERS
-router.get('/user/:userId', auth, async (req, res) => {
-    try {
-        const { userId } = req.params;
-        const {
-            page = 1,
-            limit = 10,
-            status
-        } = req.query;
-
-        const query = { userId };
-        if (status && status !== 'all') {
-            query.orderStatus = status;
-        }
-
-        const skip = (parseInt(page) - 1) * parseInt(limit);
-
-        const orders = await Order.find(query)
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(parseInt(limit));
-
-        const total = await Order.countDocuments(query);
-
-        // Calculate summary
-        const summary = {
-            totalOrders: total,
-            pendingOrders: await Order.countDocuments({ userId, orderStatus: 'pending' }),
-            deliveredOrders: await Order.countDocuments({ userId, orderStatus: 'delivered' }),
-            cancelledOrders: await Order.countDocuments({ userId, orderStatus: 'cancelled' })
-        };
-
-        res.json({
-            success: true,
-            orders,
-            summary,
-            pagination: {
-                total,
-                page: parseInt(page),
-                limit: parseInt(limit),
-                pages: Math.ceil(total / parseInt(limit))
-            }
-        });
-
-    } catch (error) {
-        console.error('Error fetching orders:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch orders'
-        });
-    }
-});
-
 // 🔍 GET SINGLE ORDER BY ORDER ID
 router.get('/:orderId', auth, async (req, res) => {
     try {
@@ -451,10 +516,10 @@ router.put('/:orderId/status', auth, async (req, res) => {
 
             // Restore stock to specific fragrance inventory
             for (const item of order.items) {
-                const inventory = await Inventory.findOne({ 
-                    inventoryId: item.inventoryId 
+                const inventory = await Inventory.findOne({
+                    inventoryId: item.inventoryId
                 });
-                
+
                 if (inventory) {
                     await inventory.addStock(
                         item.quantity,
@@ -463,7 +528,7 @@ router.put('/:orderId/status', auth, async (req, res) => {
                         order.userId
                     );
                     await inventory.save();
-                    
+
                     console.log(`✅ Stock restored for ${item.productName} - ${item.fragrance}`);
                 }
             }
@@ -520,10 +585,10 @@ router.put('/:orderId/cancel', auth, async (req, res) => {
 
         // Restore stock to specific fragrance inventory
         for (const item of order.items) {
-            const inventory = await Inventory.findOne({ 
-                inventoryId: item.inventoryId 
+            const inventory = await Inventory.findOne({
+                inventoryId: item.inventoryId
             });
-            
+
             if (inventory) {
                 await inventory.addStock(
                     item.quantity,
@@ -532,7 +597,7 @@ router.put('/:orderId/cancel', auth, async (req, res) => {
                     order.userId
                 );
                 await inventory.save();
-                
+
                 console.log(`✅ Stock restored for ${item.productName} - ${item.fragrance}`);
             }
         }
@@ -719,6 +784,160 @@ router.get('/all/orders', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to fetch orders'
+        });
+    }
+});
+
+
+// 📊 ADMIN: GET ORDER STATS SUMMARY
+router.get('/admin/stats', async (req, res) => {
+    try {
+        // Verify admin authentication (you might want to add admin auth middleware)
+        // const token = req.headers.authorization?.split(' ')[1];
+        // if (!token || !verifyAdminToken(token)) {
+        //     return res.status(401).json({ success: false, message: 'Unauthorized' });
+        // }
+
+        // Get comprehensive stats
+        const stats = await Order.aggregate([
+            {
+                $group: {
+                    _id: null,
+                    totalOrders: { $sum: 1 },
+                    totalRevenue: { $sum: "$pricing.total" },
+                    pendingOrders: {
+                        $sum: { $cond: [{ $eq: ["$orderStatus", "pending"] }, 1, 0] }
+                    },
+                    processingOrders: {
+                        $sum: { $cond: [{ $eq: ["$orderStatus", "processing"] }, 1, 0] }
+                    },
+                    shippedOrders: {
+                        $sum: { $cond: [{ $eq: ["$orderStatus", "shipped"] }, 1, 0] }
+                    },
+                    deliveredOrders: {
+                        $sum: { $cond: [{ $eq: ["$orderStatus", "delivered"] }, 1, 0] }
+                    },
+                    cancelledOrders: {
+                        $sum: { $cond: [{ $eq: ["$orderStatus", "cancelled"] }, 1, 0] }
+                    },
+                    totalItems: { $sum: { $size: "$items" } },
+                    totalQuantity: {
+                        $sum: {
+                            $reduce: {
+                                input: "$items",
+                                initialValue: 0,
+                                in: { $add: ["$$value", "$$this.quantity"] }
+                            }
+                        }
+                    },
+                    avgOrderValue: { $avg: "$pricing.total" }
+                }
+            }
+        ]);
+
+        // Get today's stats
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const todayStats = await Order.aggregate([
+            {
+                $match: {
+                    createdAt: { $gte: today }
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    todayOrders: { $sum: 1 },
+                    todayRevenue: { $sum: "$pricing.total" }
+                }
+            }
+        ]);
+
+        // Get monthly stats
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+
+        const monthlyStats = await Order.aggregate([
+            {
+                $match: {
+                    createdAt: {
+                        $gte: new Date(currentYear, currentMonth, 1),
+                        $lt: new Date(currentYear, currentMonth + 1, 1)
+                    }
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    monthlyOrders: { $sum: 1 },
+                    monthlyRevenue: { $sum: "$pricing.total" }
+                }
+            }
+        ]);
+
+        // Get status breakdown for chart
+        const statusBreakdown = await Order.aggregate([
+            {
+                $group: {
+                    _id: "$orderStatus",
+                    count: { $sum: 1 },
+                    revenue: { $sum: "$pricing.total" }
+                }
+            }
+        ]);
+
+        // Get top products
+        const topProducts = await Order.aggregate([
+            { $unwind: "$items" },
+            {
+                $group: {
+                    _id: {
+                        productId: "$items.productId",
+                        productName: "$items.productName",
+                        fragrance: "$items.fragrance"
+                    },
+                    totalSold: { $sum: "$items.quantity" },
+                    totalRevenue: { $sum: "$items.totalPrice" }
+                }
+            },
+            { $sort: { totalSold: -1 } },
+            { $limit: 10 }
+        ]);
+
+        const result = stats[0] || {
+            totalOrders: 0,
+            totalRevenue: 0,
+            pendingOrders: 0,
+            processingOrders: 0,
+            shippedOrders: 0,
+            deliveredOrders: 0,
+            cancelledOrders: 0,
+            totalItems: 0,
+            totalQuantity: 0,
+            avgOrderValue: 0
+        };
+
+        const todayResult = todayStats[0] || { todayOrders: 0, todayRevenue: 0 };
+        const monthlyResult = monthlyStats[0] || { monthlyOrders: 0, monthlyRevenue: 0 };
+
+        res.json({
+            success: true,
+            stats: {
+                ...result,
+                ...todayResult,
+                ...monthlyResult,
+                statusBreakdown,
+                topProducts: topProducts.slice(0, 5) // Top 5 products
+            }
+        });
+
+    } catch (error) {
+        console.error('Error fetching admin stats:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch admin stats',
+            error: error.message
         });
     }
 });
