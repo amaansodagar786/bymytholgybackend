@@ -26,7 +26,7 @@ router.post("/register", async (req, res) => {
   }
 });
 
-// LOGIN ADMIN
+// In your admin login route
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -37,9 +37,15 @@ router.post("/login", async (req, res) => {
     const match = await bcrypt.compare(password, admin.password);
     if (!match) return res.status(400).json({ message: "Wrong password" });
 
+    // FIX: Use environment variable, not hardcoded string
     const token = jwt.sign(
-      { id: admin._id, adminId: admin.adminId, role: admin.role },
-      "SECRET123",
+      {
+        id: admin._id,
+        adminId: admin.adminId,
+        role: admin.role,
+        email: admin.email  // Add email too
+      },
+      process.env.JWT_SECRET || "SECRET123",  // <-- USE ENV VARIABLE!
       { expiresIn: "7d" }
     );
 

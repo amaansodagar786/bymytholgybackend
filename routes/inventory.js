@@ -93,24 +93,71 @@ router.get("/all", async (req, res) => {
 // ========== ADD STOCK (Works with fragrance) ==========
 router.put("/add-stock/:inventoryId", adminAuth, async (req, res) => {
   try {
+    console.log("🔥🔥🔥 ADD STOCK ROUTE HIT! 🔥🔥🔥");
+    console.log("Time:", new Date().toISOString());
+
+    // Log everything about the request
+    console.log("📋 REQUEST DETAILS:");
+    console.log("URL:", req.originalUrl);
+    console.log("Method:", req.method);
+    console.log("Params:", req.params);
+    console.log("Inventory ID:", req.params.inventoryId);
+    console.log("Request Body:", req.body);
+    console.log("Headers:", {
+      authorization: req.headers.authorization ? "PRESENT" : "MISSING",
+      contentType: req.headers['content-type']
+    });
+
+    // STEP 1: Extract params and validate
     const { inventoryId } = req.params;
     const { quantity, reason, notes } = req.body;
 
+    console.log("📊 VALIDATING DATA:");
+    console.log("- Quantity received:", quantity);
+    console.log("- Type of quantity:", typeof quantity);
+    console.log("- Reason:", reason);
+    console.log("- Notes:", notes);
+
     // Validate quantity
     if (!quantity || isNaN(quantity) || quantity <= 0) {
+      console.log("❌ VALIDATION FAILED: Invalid quantity");
       return res.status(400).json({ error: "Quantity must be a positive number" });
     }
+    console.log("✅ Quantity validation passed");
 
-    // Get inventory item (includes fragrance)
+    // STEP 2: Get inventory item
+    console.log("🔍 FINDING INVENTORY ITEM...");
+    console.log("Searching for ID:", inventoryId);
+
     const inventory = await Inventory.findById(inventoryId);
+
     if (!inventory) {
+      console.log("❌ INVENTORY NOT FOUND for ID:", inventoryId);
       return res.status(404).json({ error: "Inventory item not found" });
     }
+    console.log("✅ Inventory found:", {
+      id: inventory._id,
+      productName: inventory.productName,
+      fragrance: inventory.fragrance,
+      currentStock: inventory.stock
+    });
 
-    // Get admin info from token
+    // STEP 3: Get admin info from token
+    console.log("👤 ADMIN INFO FROM TOKEN:");
+    console.log("- req.admin object:", req.admin);
+    console.log("- Admin email:", req.admin?.email);
+
     const adminEmail = req.admin?.email || "admin";
+    console.log("✅ Using admin email:", adminEmail);
 
-    // Add stock using schema method
+    // STEP 4: Add stock
+    console.log("🔄 ADDING STOCK...");
+    console.log("- Quantity to add:", parseFloat(quantity));
+    console.log("- Reason:", reason || "Stock added manually");
+    console.log("- Notes:", notes || "");
+    console.log("- By admin:", adminEmail);
+
+    const previousStock = inventory.stock;
     inventory.addStock(
       parseFloat(quantity),
       reason || "Stock added manually",
@@ -119,7 +166,13 @@ router.put("/add-stock/:inventoryId", adminAuth, async (req, res) => {
     );
 
     await inventory.save();
+    console.log("✅ Stock saved successfully!");
+    console.log("- Previous stock:", previousStock);
+    console.log("- New stock:", inventory.stock);
+    console.log("- Difference:", inventory.stock - previousStock);
 
+    // STEP 5: Send response
+    console.log("📤 SENDING SUCCESS RESPONSE");
     res.json({
       message: `Successfully added ${quantity} stock to ${inventory.fragrance} fragrance`,
       inventory: {
@@ -132,9 +185,19 @@ router.put("/add-stock/:inventoryId", adminAuth, async (req, res) => {
         addedQuantity: quantity
       }
     });
+
+    console.log("🎯 ADD STOCK COMPLETED SUCCESSFULLY!");
+
   } catch (err) {
-    console.error("Error adding stock:", err);
-    res.status(500).json({ error: err.message });
+    console.error("❌❌❌ ERROR IN ADD STOCK ROUTE:", err);
+    console.error("Error message:", err.message);
+    console.error("Error stack:", err.stack);
+    console.error("Error name:", err.name);
+
+    res.status(500).json({
+      error: err.message,
+      type: err.name
+    });
   }
 });
 

@@ -18,7 +18,7 @@ const authenticateUser = async (req, res, next) => {
             });
         }
 
-        const decoded = jwt.verify(token, "SECRET123");
+        const decoded = jwt.verify(token, process.env.JWT_SECRET)
         const user = await User.findOne({ email: decoded.email });
 
         if (!user) {

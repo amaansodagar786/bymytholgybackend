@@ -11,7 +11,8 @@ function adminAuth(req, res, next) {
   const token = authHeader.replace("Bearer ", "");
 
   try {
-    const decoded = jwt.verify(token, "SECRET123");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
 
     if (decoded.role !== "admin") {
       return res.status(403).json({ message: "Only admin allowed" });
@@ -36,7 +37,8 @@ const auth = (req, res, next) => {
 
     const token = authHeader.replace("Bearer ", "");
 
-    const decoded = jwt.verify(token, "SECRET123");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
 
     req.auth = {
       email: decoded.email,
@@ -51,5 +53,5 @@ const auth = (req, res, next) => {
 };
 
 
-// FINAL EXPORT (CORRECT)
+
 module.exports = { adminAuth, auth };
