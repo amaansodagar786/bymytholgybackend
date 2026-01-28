@@ -477,4 +477,175 @@ router.get("/:productId", async (req, res) => {
   }
 });
 
+
+
+// 🟦 GET RELATED PRODUCTS BY FRAGRANCES
+router.post("/related-by-fragrances", async (req, res) => {
+  try {
+    const { productId, fragrances, categoryId, limit = 8 } = req.body;
+
+    console.log("🔍 Finding related products by fragrances:", {
+      productId,
+      fragrances,
+      categoryId,
+      limit
+    });
+
+    if (!productId) {
+      return res.status(400).json({
+        success: false,
+        message: "Product ID is required"
+      });
+    }
+
+    // If no fragrances provided, fallback to same category
+    if (!fragrances || !Array.isArray(fragrances) || fragrances.length === 0) {
+      console.log("⚠️ No fragrances provided, falling back to category search");
+
+      const categoryProducts = await Product.find({
+        productId: { $ne: productId },
+        categoryId,
+        isActive: true,
+        type: "simple" // Only get simple products (since all are simple now)
+      })
+        .limit(limit)
+        .sort({ createdAt: -1 })
+        .lean();
+
+      console.log(`✅ Found ${categoryProducts.length} products in same category`);
+
+      return res.json({
+        success: true,
+        products: categoryProducts
+      });
+    }
+
+    // STEP 1: Find products with ANY of the same fragrances in same category
+    const relatedProducts = await Product.find({
+      productId: { $ne: productId }, // Exclude current product
+      categoryId,
+      isActive: true,
+      type: "simple",
+      $or: [
+        // Match fragrances in colors array
+        { "colors.fragrances": { $in: fragrances } }
+      ]
+    })
+      .limit(limit)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    console.log(`✅ Found ${relatedProducts.length} products with same fragrances`);
+
+    // STEP 2: If we found enough products, return them
+    if (relatedProducts.length >= limit / 2) {
+      return res.json({
+        success: true,
+        products: relatedProducts
+      });
+    }
+
+    // STEP 3: If not enough, find more from same category (even if different fragrances)
+    const remainingNeeded = limit - relatedProducts.length;
+
+    if (remainingNeeded > 0) {
+      console.log(`🔍 Need ${remainingNeeded} more products, searching in same category`);
+
+      const additionalProducts = await Product.find({
+        productId: {
+          $nin: [
+            productId,
+            ...relatedProducts.map(p => p.productId)
+          ]
+        },
+        categoryId,
+        isActive: true,
+        type: "simple"
+      })
+        .limit(remainingNeeded)
+        .sort({ createdAt: -1 })
+        .lean();
+
+      const allProducts = [...relatedProducts, ...additionalProducts];
+
+      console.log(`✅ Total found: ${allProducts.length} products`);
+
+      return res.json({
+        success: true,
+        products: allProducts
+      });
+    }
+
+    // STEP 4: If still not enough, fallback to any active products
+    if (relatedProducts.length < 4) {
+      console.log("🔍 Not enough related products, getting popular products");
+
+      const popularProducts = await Product.find({
+        productId: { $ne: productId },
+        isActive: true,
+        type: "simple"
+      })
+        .limit(limit)
+        .sort({ createdAt: -1 })
+        .lean();
+
+      console.log(`✅ Found ${popularProducts.length} popular products`);
+
+      return res.json({
+        success: true,
+        products: popularProducts
+      });
+    }
+
+    res.json({
+      success: true,
+      products: relatedProducts
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching related products:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+
+
+// 🟦 GET PRODUCTS BY CATEGORY (with current product excluded)
+router.get("/category/:categoryId/exclude/:productId", async (req, res) => {
+  try {
+    const { categoryId, productId } = req.params;
+    const limit = parseInt(req.query.limit) || 8;
+
+    console.log(`🔍 Getting products from category ${categoryId}, excluding ${productId}`);
+
+    const products = await Product.find({
+      categoryId,
+      productId: { $ne: productId },
+      isActive: true,
+      type: "simple"
+    })
+      .limit(limit)
+      .sort({ createdAt: -1 });
+
+    console.log(`✅ Found ${products.length} products`);
+
+    res.json({
+      success: true,
+      products: products
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching category products:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

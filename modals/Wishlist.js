@@ -72,7 +72,7 @@ const WishlistSchema = new mongoose.Schema({
     // Metadata
     addedFrom: {
         type: String,
-        enum: ["home", "product"],
+        enum: ["home", "product", "related-products"],
         default: "home"
     },
 
