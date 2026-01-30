@@ -163,6 +163,75 @@ router.post(
       const data = req.body;
       const files = req.files || [];
 
+      // ✅ ADDED: DEBUG LOGGING START
+      console.log("\n" + "=".repeat(50));
+      console.log("📥 BACKEND - ADD PRODUCT REQUEST RECEIVED");
+      console.log("=".repeat(50));
+
+      // Log body fields
+      console.log("\n📦 REQUEST BODY FIELDS:");
+      Object.keys(data).forEach(key => {
+        const value = data[key];
+        if (typeof value === 'string') {
+          const displayValue = value.length > 100
+            ? value.substring(0, 100) + "..."
+            : value;
+          console.log(`   "${key}": ${displayValue}`);
+        } else {
+          console.log(`   "${key}": ${typeof value}`, value);
+        }
+      });
+
+      // Log files
+      console.log(`\n📁 FILES RECEIVED: ${files.length} file(s)`);
+
+      if (files.length > 0) {
+        files.forEach((file, index) => {
+          console.log(`\n📎 File ${index + 1}:`);
+          console.log(`   Fieldname: "${file.fieldname}"`);
+          console.log(`   Original: "${file.originalname}"`);
+          console.log(`   Saved as: "${file.filename}"`);
+          console.log(`   Type: ${file.mimetype}`);
+          console.log(`   Size: ${file.size} bytes`);
+          console.log(`   Destination: ${file.destination || 'N/A'}`);
+        });
+      } else {
+        console.log("   ❌ No files received at all");
+      }
+
+      // Check specifically for thumbnail
+      console.log("\n🔍 THUMBNAIL SEARCH:");
+      const thumbnailFile = files.find(file => file.fieldname === 'thumbnail');
+      console.log("   Looking for fieldname 'thumbnail':", !!thumbnailFile);
+
+      if (thumbnailFile) {
+        console.log("   ✅ FOUND THUMBNAIL FILE:");
+        console.log(`      Original name: ${thumbnailFile.originalname}`);
+        console.log(`      Saved filename: ${thumbnailFile.filename}`);
+        console.log(`      Size: ${thumbnailFile.size} bytes`);
+        console.log(`      MIME type: ${thumbnailFile.mimetype}`);
+      } else {
+        console.log("   ❌ NO THUMBNAIL FILE FOUND");
+        console.log("   All fieldnames available:", files.map(f => `"${f.fieldname}"`).join(", "));
+      }
+
+      // Check for product images
+      const productImages = files.filter(file =>
+        file.fieldname.startsWith('colorImages') ||
+        file.fieldname.includes('color')
+      );
+      console.log(`\n🖼️ PRODUCT IMAGES: ${productImages.length} image(s)`);
+      if (productImages.length > 0) {
+        productImages.forEach((img, i) => {
+          console.log(`   Product Image ${i + 1}: "${img.originalname}" (${img.fieldname})`);
+        });
+      }
+
+      console.log("\n" + "=".repeat(50));
+      console.log("🔄 PROCESSING PRODUCT DATA");
+      console.log("=".repeat(50));
+      // ✅ DEBUG LOGGING END
+
       console.log("📝 Creating new product...");
 
       // Generate productId if not exists
@@ -212,12 +281,17 @@ router.post(
       });
 
       // Process uploaded files
-      const thumbnailFile = files.find(file => file.fieldname === 'thumbnail');
+      // const thumbnailFile = files.find(file => file.fieldname === 'thumbnail');
       const colorImages = files.filter(file => file.fieldname.startsWith('colorImages'));
 
-      // Save THUMBNAIL image
+      // Save THUMBNAIL image - FIXED VERSION
       if (thumbnailFile) {
         data.thumbnailImage = createImageUrl(req, thumbnailFile.filename);
+        console.log("✅ Thumbnail URL created:", data.thumbnailImage);
+      } else {
+        // If no thumbnail, DO NOT use product images
+        data.thumbnailImage = "";
+        console.log("⚠️ No thumbnail file uploaded - setting thumbnailImage to empty string");
       }
 
       // Handle color images
@@ -234,6 +308,7 @@ router.post(
 
             const imageUrl = createImageUrl(req, file.filename);
             uploadedImages[colorIndex].push(imageUrl);
+            console.log(`📸 Added product image to color[${colorIndex}]:`, imageUrl);
           }
         });
 
@@ -254,13 +329,36 @@ router.post(
       data.createdAt = new Date();
       data.updatedAt = new Date();
 
+      // ✅ ADDED: Log data before saving
+      console.log("\n💾 DATA TO BE SAVED TO DATABASE:");
+      console.log("   Product Name:", data.productName);
+      console.log("   Thumbnail Image:", data.thumbnailImage || "(empty/null)");
+      console.log("   Has thumbnail?", !!data.thumbnailImage);
+      console.log("   Product Images count:", data.colors?.[0]?.images?.length || 0);
+      if (data.colors?.[0]?.images?.length > 0) {
+        console.log("   First product image:", data.colors[0].images[0]);
+      }
+
       console.log("💾 Saving product to database...");
       // Create product
       const product = await Product.create(data);
 
+      // ✅ ADDED: Log what was actually saved
+      console.log("\n✅ PRODUCT SAVED TO DATABASE:");
+      console.log("   Product ID:", product.productId);
+      console.log("   Thumbnail URL in DB:", product.thumbnailImage || "(empty/null)");
+      console.log("   Product Images in DB:", product.colors?.[0]?.images?.length || 0);
+      if (product.colors?.[0]?.images?.length > 0) {
+        console.log("   First product image in DB:", product.colors[0].images[0]);
+      }
+
       // AUTO-CREATE INVENTORY ENTRIES for each fragrance
       console.log("📊 Creating inventory entries...");
       await createInventoryEntries(product);
+
+      console.log("\n" + "=".repeat(50));
+      console.log("✅ PRODUCT ADDED SUCCESSFULLY");
+      console.log("=".repeat(50) + "\n");
 
       res.status(201).json({
         message: "Product added successfully",
@@ -268,11 +366,14 @@ router.post(
       });
 
     } catch (err) {
-      console.error("❌ Error adding product:", err);
+      console.error("\n❌ ERROR ADDING PRODUCT:");
+      console.error("   Error message:", err.message);
+      console.error("   Error stack:", err.stack);
       res.status(500).json({ error: err.message });
     }
   }
 );
+
 
 // 🟡 UPDATE PRODUCT - UPDATED for fragrances
 router.put(

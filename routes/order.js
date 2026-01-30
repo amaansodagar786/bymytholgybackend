@@ -125,10 +125,10 @@ router.get('/user/:userId', auth, async (req, res) => {
     }
 });
 
-// 📦 CREATE ORDER (from checkout) - UPDATED FOR FRAGRANCE
+// 📦 CREATE ORDER (from checkout) - FIXED VERSION
 router.post('/create', auth, async (req, res) => {
     try {
-        const userId = req.body.userId; // From frontend
+        const userId = req.body.userId;
         const {
             checkoutMode = 'cart',
             items,
@@ -158,7 +158,7 @@ router.post('/create', auth, async (req, res) => {
             });
         }
 
-        // Process each item
+        // Process each item - USE CART DATA DIRECTLY
         const validatedItems = [];
         let subtotal = 0;
         let totalSavings = 0;
@@ -174,14 +174,14 @@ router.post('/create', auth, async (req, res) => {
                     });
                 }
 
-                // Get fragrance from item data
+                // Get fragrance from cart item
                 const fragrance = item.selectedFragrance || "Default";
 
                 // 2. Find inventory WITH FRAGRANCE
                 const inventoryQuery = {
                     productId: item.productId,
                     colorId: item.selectedColor.colorId,
-                    fragrance: fragrance // ADDED: Include fragrance in query
+                    fragrance: fragrance
                 };
 
                 if (item.selectedModel?.modelId) {
@@ -205,60 +205,36 @@ router.post('/create', auth, async (req, res) => {
                     });
                 }
 
-                // 4. Find active offer (offer is color-based, not fragrance-based)
-                let currentOffer = null;
-                if (item.selectedColor?.colorId) {
-                    const offerQuery = {
-                        productId: item.productId,
-                        colorId: item.selectedColor.colorId,
-                        isActive: true,
-                        startDate: { $lte: new Date() }
-                    };
+                // 4. USE CART'S PRICE DATA DIRECTLY (Don't recalculate!)
+                const cartUnitPrice = item.unitPrice || 0; // Original price from cart
+                const cartFinalPrice = item.finalPrice || 0; // Price after all offers from cart
+                const cartOfferPercentage = item.offerDetails?.offerPercentage || 0; // Offer % from cart
 
-                    if (item.selectedModel?.modelId) {
-                        offerQuery.variableModelId = item.selectedModel.modelId;
-                    } else {
-                        offerQuery.variableModelId = { $in: [null, ""] };
-                    }
+                // Calculate item total and savings BASED ON CART DATA
+                const itemTotal = cartFinalPrice * item.quantity;
+                const originalTotal = cartUnitPrice * item.quantity;
+                const itemSavings = originalTotal - itemTotal;
 
-                    offerQuery.$or = [
-                        { endDate: null },
-                        { endDate: { $gte: new Date() } }
-                    ];
-
-                    currentOffer = await ProductOffer.findOne(offerQuery);
-                }
-
-                // 5. Calculate prices
-                const unitPrice = item.unitPrice || 0;
-                const offerPercentage = currentOffer ? currentOffer.offerPercentage : 0;
-                const offerPrice = offerPercentage > 0
-                    ? unitPrice * (1 - offerPercentage / 100)
-                    : unitPrice;
-
-                const itemTotal = offerPrice * item.quantity;
-                const itemSavings = (unitPrice - offerPrice) * item.quantity;
-
-                subtotal += unitPrice * item.quantity;
+                subtotal += cartUnitPrice * item.quantity;
                 totalSavings += itemSavings;
 
-                // 6. Create order item WITH FRAGRANCE
+                // 5. Create order item WITH CART DATA
                 const orderItem = {
                     productId: item.productId,
                     productName: item.productName,
                     colorId: item.selectedColor.colorId,
                     colorName: item.selectedColor.colorName,
-                    fragrance: fragrance, // ADDED: Store fragrance
+                    fragrance: fragrance,
                     modelId: item.selectedModel?.modelId || "",
                     modelName: item.selectedModel?.modelName || "Default",
                     size: item.selectedSize || "",
                     quantity: item.quantity,
-                    unitPrice: unitPrice,
-                    offerPercentage: offerPercentage,
-                    offerPrice: offerPrice,
-                    totalPrice: itemTotal,
-                    offerId: currentOffer?._id || null,
-                    offerLabel: currentOffer?.offerLabel || "",
+                    unitPrice: cartUnitPrice, // Original price
+                    offerPercentage: cartOfferPercentage, // Offer % from cart
+                    offerPrice: cartFinalPrice, // Final price after offers
+                    totalPrice: itemTotal, // Final price × quantity
+                    offerId: item.offerDetails?.offerId || null,
+                    offerLabel: item.offerDetails?.offerLabel || "",
                     savedAmount: itemSavings,
                     purchasedFromStock: inventory.stock,
                     inventoryId: inventory.inventoryId,
@@ -267,7 +243,7 @@ router.post('/create', auth, async (req, res) => {
 
                 validatedItems.push(orderItem);
 
-                // 7. Deduct stock FROM SPECIFIC FRAGRANCE INVENTORY
+                // 6. Deduct stock
                 await inventory.deductStock(
                     item.quantity,
                     "Order placed",
@@ -287,23 +263,24 @@ router.post('/create', auth, async (req, res) => {
             }
         }
 
-        // 8. Calculate final amounts
-        const shipping = subtotal > 1000 ? 0 : 50;
-        const tax = (subtotal - totalSavings) * 0.18;
-        const total = (subtotal - totalSavings) + shipping + tax;
+        // 7. Calculate final amounts - FIXED CALCULATION
+        const netSubtotal = subtotal - totalSavings; // Price after all discounts
+        const shipping = netSubtotal > 1000 ? 0 : 50;
+        const tax = netSubtotal * 0.18; // Tax on discounted amount
+        const total = netSubtotal + shipping + tax;
 
-        // 9. Create order
+        // 8. Create order
         const order = new Order({
             userId,
             checkoutMode,
             items: validatedItems,
             pricing: {
-                subtotal,
-                totalSavings,
-                shipping,
-                tax,
+                subtotal: subtotal, // Total original price
+                totalSavings: totalSavings, // Total savings from offers
+                shipping: shipping,
+                tax: tax,
                 taxPercentage: 18,
-                total
+                total: total
             },
             deliveryAddress: {
                 addressId: address.addressId,
@@ -330,12 +307,12 @@ router.post('/create', auth, async (req, res) => {
 
         await order.save();
 
-        // 10. Clear cart if cart mode
+        // 9. Clear cart if cart mode
         if (checkoutMode === 'cart') {
             await Cart.deleteMany({ userId });
         }
 
-        // 11. Return success
+        // 10. Return success
         res.status(201).json({
             success: true,
             message: 'Order placed successfully',
@@ -352,7 +329,10 @@ router.post('/create', auth, async (req, res) => {
                     productName: item.productName,
                     fragrance: item.fragrance,
                     quantity: item.quantity,
-                    totalPrice: item.totalPrice
+                    unitPrice: item.unitPrice,
+                    offerPrice: item.offerPrice,
+                    totalPrice: item.totalPrice,
+                    savedAmount: item.savedAmount
                 }))
             }
         });

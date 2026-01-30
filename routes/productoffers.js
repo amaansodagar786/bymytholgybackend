@@ -2,16 +2,16 @@ const express = require("express");
 const router = express.Router();
 const ProductOffer = require("../modals/ProductOffers");
 const Product = require("../modals/Product");
-const {adminAuth} = require("../middleware/auth");
+const { adminAuth } = require("../middleware/auth");
 
 // Helper function to check if offer is currently valid
 function isOfferValid(offer) {
   if (!offer || !offer.isActive) return false;
-  
+
   const now = new Date();
   if (offer.startDate > now) return false;
   if (!offer.endDate) return true;
-  
+
   return now >= offer.startDate && now <= offer.endDate;
 }
 
@@ -49,10 +49,10 @@ router.get("/products-with-color-offers", adminAuth, async (req, res) => {
     // Create a map for quick lookup: productId_modelId_colorId -> offer
     const offerMap = {};
     offers.forEach(offer => {
-      const key = offer.isForVariableProduct 
+      const key = offer.isForVariableProduct
         ? `${offer.productId}_${offer.variableModelId}_${offer.colorId}`
         : `${offer.productId}_${offer.colorId}`;
-      
+
       offerMap[key] = {
         ...offer.toObject(),
         isCurrentlyValid: isOfferValid(offer)
@@ -67,13 +67,13 @@ router.get("/products-with-color-offers", adminAuth, async (req, res) => {
           const key = `${product.productId}_${color.colorId}`;
           const offer = offerMap[key];
           const isValidOffer = offer && isOfferValid(offer);
-          
+
           let offerDetails = null;
           if (isValidOffer) {
             const originalPrice = color.currentPrice || 0;
             const discountAmount = (originalPrice * offer.offerPercentage) / 100;
             const offerPrice = Math.max(0, originalPrice - discountAmount);
-            
+
             offerDetails = {
               offerId: offer._id,
               offerPercentage: offer.offerPercentage,
@@ -84,7 +84,7 @@ router.get("/products-with-color-offers", adminAuth, async (req, res) => {
               hasEndDate: !!offer.endDate,
               modelName: offer.modelName
             };
-            
+
             return {
               ...color,
               originalPriceDisplay: originalPrice,
@@ -93,7 +93,7 @@ router.get("/products-with-color-offers", adminAuth, async (req, res) => {
               offer: offerDetails
             };
           }
-          
+
           return {
             ...color,
             hasOffer: false,
@@ -101,7 +101,7 @@ router.get("/products-with-color-offers", adminAuth, async (req, res) => {
           };
         });
       }
-      
+
       // Process variable products
       else if (product.type === "variable" && product.models) {
         product.models = product.models.map((model, modelIndex) => {
@@ -111,13 +111,13 @@ router.get("/products-with-color-offers", adminAuth, async (req, res) => {
               const key = `${product.productId}_${variableModelId}_${color.colorId}`;
               const offer = offerMap[key];
               const isValidOffer = offer && isOfferValid(offer);
-              
+
               let offerDetails = null;
               if (isValidOffer) {
                 const originalPrice = color.currentPrice || 0;
                 const discountAmount = (originalPrice * offer.offerPercentage) / 100;
                 const offerPrice = Math.max(0, originalPrice - discountAmount);
-                
+
                 offerDetails = {
                   offerId: offer._id,
                   offerPercentage: offer.offerPercentage,
@@ -129,7 +129,7 @@ router.get("/products-with-color-offers", adminAuth, async (req, res) => {
                   modelName: offer.modelName,
                   variableModelId: offer.variableModelId
                 };
-                
+
                 return {
                   ...color,
                   originalPriceDisplay: originalPrice,
@@ -138,7 +138,7 @@ router.get("/products-with-color-offers", adminAuth, async (req, res) => {
                   offer: offerDetails
                 };
               }
-              
+
               return {
                 ...color,
                 hasOffer: false,
@@ -149,7 +149,7 @@ router.get("/products-with-color-offers", adminAuth, async (req, res) => {
           return model;
         });
       }
-      
+
       return product;
     });
 
@@ -163,22 +163,22 @@ router.get("/products-with-color-offers", adminAuth, async (req, res) => {
 // 🟢 ADD/UPDATE offer for a specific color
 router.post("/add-color-offer", adminAuth, async (req, res) => {
   try {
-    const { 
-      productId, 
-      colorId, 
+    const {
+      productId,
+      colorId,
       colorName,
-      offerPercentage, 
-      offerLabel, 
-      startDate, 
+      offerPercentage,
+      offerLabel,
+      startDate,
       endDate,
       modelName,
-      variableModelId 
+      variableModelId
     } = req.body;
 
     // Validate required fields
     if (!productId || !colorId || !colorName || offerPercentage === undefined) {
-      return res.status(400).json({ 
-        error: "Product ID, Color ID, Color Name, and offer percentage are required" 
+      return res.status(400).json({
+        error: "Product ID, Color ID, Color Name, and offer percentage are required"
       });
     }
 
@@ -196,12 +196,12 @@ router.post("/add-color-offer", adminAuth, async (req, res) => {
     // Check if color exists in product
     let colorExists = false;
     let actualModelName = modelName || "Default";
-    
+
     if (product.type === "simple") {
       colorExists = product.colors?.some(color => color.colorId === colorId);
       actualModelName = product.modelName || "Default";
     } else if (product.type === "variable" && variableModelId) {
-      const model = product.models?.find(m => 
+      const model = product.models?.find(m =>
         m._id?.toString() === variableModelId || m.modelId === variableModelId
       );
       if (model) {
@@ -215,25 +215,25 @@ router.post("/add-color-offer", adminAuth, async (req, res) => {
     }
 
     // Build query based on product type
-    const query = variableModelId 
-      ? { 
-          productId, 
-          variableModelId, 
-          colorId, 
-          isActive: true 
-        }
-      : { 
-          productId, 
-          colorId, 
-          variableModelId: "", 
-          isActive: true 
-        };
+    const query = variableModelId
+      ? {
+        productId,
+        variableModelId,
+        colorId,
+        isActive: true
+      }
+      : {
+        productId,
+        colorId,
+        variableModelId: "",
+        isActive: true
+      };
 
     // Check if color already has an active offer
     const existingOffer = await ProductOffer.findOne(query);
 
     let offer;
-    
+
     if (existingOffer) {
       // Update existing offer
       offer = await ProductOffer.findByIdAndUpdate(
@@ -271,14 +271,14 @@ router.post("/add-color-offer", adminAuth, async (req, res) => {
     });
   } catch (err) {
     console.error("Error adding/updating color offer:", err);
-    
+
     // Handle duplicate active offer error
     if (err.code === 11000) {
-      return res.status(400).json({ 
-        error: "This color already has an active offer. Please deactivate the existing offer first." 
+      return res.status(400).json({
+        error: "This color already has an active offer. Please deactivate the existing offer first."
       });
     }
-    
+
     res.status(500).json({ error: err.message });
   }
 });
@@ -290,7 +290,7 @@ router.put("/deactivate-color-offer/:offerId", adminAuth, async (req, res) => {
 
     const offer = await ProductOffer.findByIdAndUpdate(
       offerId,
-      { 
+      {
         isActive: false,
         updatedAt: new Date()
       },
@@ -318,7 +318,7 @@ router.put("/reactivate-color-offer/:offerId", adminAuth, async (req, res) => {
 
     const offer = await ProductOffer.findByIdAndUpdate(
       offerId,
-      { 
+      {
         isActive: true,
         updatedAt: new Date()
       },
@@ -338,6 +338,61 @@ router.put("/reactivate-color-offer/:offerId", adminAuth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+
+
+// 🟦 GET color offers for a specific product
+router.get("/product-color-offers/:productId", async (req, res) => {
+  try {
+    const { productId } = req.params;
+
+    const offers = await ProductOffer.find({
+      productId,
+      isActive: true
+    }).sort({ modelName: 1, colorName: 1 });
+
+    // Add validity check to each offer
+    const offersWithValidity = offers.map(offer => ({
+      ...offer.toObject(),
+      isCurrentlyValid: isOfferValid(offer)
+    }));
+
+    res.json(offersWithValidity);
+  } catch (err) {
+    console.error("Error fetching product color offers:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 🟦 GET color offers for a specific color
+router.get("/color-offer/:productId/:colorId", adminAuth, async (req, res) => {
+  try {
+    const { productId, colorId } = req.params;
+    const { variableModelId } = req.query;
+
+    const query = variableModelId
+      ? { productId, variableModelId, colorId, isActive: true }
+      : { productId, colorId, variableModelId: "", isActive: true };
+
+    const offer = await ProductOffer.findOne(query);
+
+    if (!offer) {
+      return res.status(404).json({ message: "No active offer found for this color" });
+    }
+
+    // Add validity check
+    const offerWithValidity = {
+      ...offer.toObject(),
+      isCurrentlyValid: isOfferValid(offer)
+    };
+
+    res.json(offerWithValidity);
+  } catch (err) {
+    console.error("Error fetching color offer:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // 🟦 GET all active color offers
 router.get("/active-color-offers", async (req, res) => {
@@ -360,56 +415,74 @@ router.get("/active-color-offers", async (req, res) => {
   }
 });
 
-// 🟦 GET color offers for a specific product
-router.get("/product-color-offers/:productId", async (req, res) => {
+
+// 🟢 GET products with offers for PUBLIC display (Optimized)
+router.get("/public-products-with-offers", async (req, res) => {
   try {
-    const { productId } = req.params;
+    // 1. Get ACTIVE products
+    const products = await Product.find({ isActive: true })
+      .select('productId productName description thumbnailImage type colors categoryId categoryName')
+      .sort({ createdAt: -1 })
+      .lean();
 
-    const offers = await ProductOffer.find({ 
-      productId, 
-      isActive: true 
-    }).sort({ modelName: 1, colorName: 1 });
+    // 2. Get ACTIVE offers WITH ALL NEEDED FIELDS
+    const offers = await ProductOffer.find({ isActive: true })
+      .select('productId colorId offerPercentage offerLabel startDate endDate isActive');
 
-    // Add validity check to each offer
-    const offersWithValidity = offers.map(offer => ({
-      ...offer.toObject(),
-      isCurrentlyValid: isOfferValid(offer)
-    }));
+    // 3. Create offer map
+    const offerMap = {};
+    const now = new Date();
 
-    res.json(offersWithValidity);
+    offers.forEach(offer => {
+      const key = `${offer.productId}_${offer.colorId}`;
+
+      // Direct date check (safer)
+      if (offer.startDate && offer.startDate > now) return;
+      if (offer.endDate && offer.endDate < now) return;
+
+      offerMap[key] = {
+        offerPercentage: offer.offerPercentage,
+        offerLabel: offer.offerLabel || "Special Offer"
+      };
+    });
+
+    // 4. Attach offers to products
+    const productsWithOffers = products.map(product => {
+      if (product.type === "simple" && product.colors && product.colors.length > 0) {
+        const color = product.colors[0];
+        const key = `${product.productId}_${color.colorId}`;
+        const offer = offerMap[key];
+
+        if (offer) {
+          product.colors[0] = {
+            ...color,
+            hasOffer: true,
+            offer: {
+              offerPercentage: offer.offerPercentage,
+              offerLabel: offer.offerLabel,
+              isCurrentlyValid: true
+            }
+          };
+        } else {
+          product.colors[0] = {
+            ...color,
+            hasOffer: false,
+            offer: null
+          };
+        }
+      }
+
+      return product;
+    });
+
+    console.log(`✅ Products with offers: ${productsWithOffers.filter(p => p.colors[0]?.hasOffer).length}`);
+    res.json(productsWithOffers);
+
   } catch (err) {
-    console.error("Error fetching product color offers:", err);
+    console.error("❌ Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// 🟦 GET color offers for a specific color
-router.get("/color-offer/:productId/:colorId", adminAuth, async (req, res) => {
-  try {
-    const { productId, colorId } = req.params;
-    const { variableModelId } = req.query;
-
-    const query = variableModelId 
-      ? { productId, variableModelId, colorId, isActive: true }
-      : { productId, colorId, variableModelId: "", isActive: true };
-
-    const offer = await ProductOffer.findOne(query);
-
-    if (!offer) {
-      return res.status(404).json({ message: "No active offer found for this color" });
-    }
-
-    // Add validity check
-    const offerWithValidity = {
-      ...offer.toObject(),
-      isCurrentlyValid: isOfferValid(offer)
-    };
-
-    res.json(offerWithValidity);
-  } catch (err) {
-    console.error("Error fetching color offer:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
 
 module.exports = router;

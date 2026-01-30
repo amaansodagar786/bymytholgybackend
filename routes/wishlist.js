@@ -6,9 +6,10 @@ const User = require("../modals/User");
 const { auth } = require("../middleware/auth");
 
 // ➤ ADD TO WISHLIST
+// ➤ ADD TO WISHLIST (UPDATED WITH FRAGRANCE CHECK)
 router.post("/add", auth, async (req, res) => {
     try {
-        const { userId, productId, selectedModel, selectedColor, selectedSize, addedFrom = "home" } = req.body;
+        const { userId, productId, selectedModel, selectedColor, selectedSize, selectedFragrance, addedFrom = "home" } = req.body;
 
         // Check if userId is provided
         if (!userId) {
@@ -27,64 +28,32 @@ router.post("/add", auth, async (req, res) => {
             return res.status(404).json({ message: "Product not found" });
         }
 
-        // In wishlist.js - UPDATE THE "ALREADY IN WISHLIST" CHECK:
-
-        // Check if already in wishlist WITH SAME SELECTIONS
-        const existingWishlist = await Wishlist.findOne({
+        // ✅ UPDATED: Check if already in wishlist WITH SAME SELECTIONS (INCLUDING FRAGRANCE)
+        const existingWishlistQuery = {
             userId,
             productId,
-            isActive: true,
-            // Check if it's the exact same variant
-            $and: [
-                {
-                    $or: [
-                        // Check selectedModel match
-                        {
-                            $and: [
-                                { selectedModel: { $exists: true } },
-                                { "selectedModel.modelId": selectedModel?.modelId }
-                            ]
-                        },
-                        { selectedModel: { $exists: false } }
-                    ]
-                },
-                {
-                    $or: [
-                        // Check selectedColor match
-                        {
-                            $and: [
-                                { selectedColor: { $exists: true } },
-                                { "selectedColor.colorId": selectedColor?.colorId }
-                            ]
-                        },
-                        { selectedColor: { $exists: false } }
-                    ]
-                },
-                {
-                    $or: [
-                        // Check selectedSize match
-                        {
-                            $and: [
-                                { selectedSize: { $exists: true } },
-                                { selectedSize: selectedSize }
-                            ]
-                        },
-                        { selectedSize: { $exists: false } }
-                    ]
-                }
-            ]
-        });
+            isActive: true
+        };
 
-        if (existingWishlist) {
-            return res.status(400).json({
-                message: "This exact variant is already in your wishlist",
-                wishlist: existingWishlist
-            });
+        // Add fragrance condition if provided
+        if (selectedFragrance) {
+            existingWishlistQuery.selectedFragrance = selectedFragrance;
+        } else {
+            // If no fragrance selected, check for wishlist items without fragrance
+            existingWishlistQuery.$or = [
+                { selectedFragrance: { $exists: false } },
+                { selectedFragrance: null }
+            ];
         }
 
+        // Check for same variant
+        const existingWishlist = await Wishlist.findOne(existingWishlistQuery);
+
         if (existingWishlist) {
             return res.status(400).json({
-                message: "Product already in wishlist",
+                message: selectedFragrance
+                    ? "This exact variant is already in your wishlist"
+                    : "Product already in wishlist",
                 wishlist: existingWishlist
             });
         }
@@ -172,9 +141,9 @@ router.post("/add", auth, async (req, res) => {
             productType: product.type,
             thumbnailImage,
             originalPrice,
-            currentPrice, // ✅ This is now guaranteed to have a value
+            currentPrice,
             selectedColor: selectedColor || null,
-            selectedFragrance: req.body.selectedFragrance || null,
+            selectedFragrance: selectedFragrance || null, // ✅ Store fragrance
             selectedModel: selectedModel || null,
             selectedSize: selectedSize || null,
             addedFrom,
@@ -194,25 +163,47 @@ router.post("/add", auth, async (req, res) => {
     }
 });
 
-// ➤ REMOVE FROM WISHLIST (FIXED VERSION)
+// ➤ REMOVE FROM WISHLIST (FIXED VERSION WITH FRAGRANCE SUPPORT)
 router.delete("/remove/:productId", auth, async (req, res) => {
     try {
-        // Get userId from QUERY PARAMETERS instead of body
-        const { userId } = req.query;
+        // Get parameters from QUERY PARAMETERS
+        const { userId, fragrance } = req.query; // ✅ Added fragrance parameter
         const { productId } = req.params;
 
         if (!userId) {
             return res.status(400).json({ message: "User ID is required" });
         }
 
+        // Build query with fragrance if provided
+        const query = {
+            userId,
+            productId,
+            isActive: true
+        };
+
+        // ✅ ADDED: Include fragrance in query if provided
+        if (fragrance) {
+            query.selectedFragrance = fragrance;
+        } else {
+            // If no fragrance specified, remove items without fragrance
+            query.$or = [
+                { selectedFragrance: { $exists: false } },
+                { selectedFragrance: null }
+            ];
+        }
+
         const result = await Wishlist.findOneAndUpdate(
-            { userId, productId, isActive: true },
+            query, // ✅ Updated query includes fragrance
             { isActive: false, updatedAt: Date.now() },
             { new: true }
         );
 
         if (!result) {
-            return res.status(404).json({ message: "Item not found in wishlist" });
+            return res.status(404).json({
+                message: fragrance
+                    ? "Item with this fragrance not found in wishlist"
+                    : "Item not found in wishlist"
+            });
         }
 
         res.json({
@@ -257,41 +248,43 @@ router.get("/my-wishlist", auth, async (req, res) => {
     }
 });
 
-// ➤ CHECK SPECIFIC VARIANT IN WISHLIST
+// Enhanced /check route
 router.get("/check/:productId", auth, async (req, res) => {
     try {
-        const { userId, colorId, modelId, size } = req.query; // Get variant details
+        const { userId, fragrance } = req.query;
         const { productId } = req.params;
 
-        if (!userId) {
-            return res.status(400).json({ message: "User ID is required" });
-        }
+        if (!userId) return res.status(400).json({ message: "User ID is required" });
 
-        // Build query to check specific variant
-        const query = {
+        // TWO SEPARATE QUERIES
+        const querySpecific = {
             userId,
             productId,
             isActive: true
         };
 
-        // Add variant filters if provided
-        if (colorId) {
-            query["selectedColor.colorId"] = colorId;
-        }
+        const queryGeneric = {
+            userId,
+            productId,
+            isActive: true,
+            $or: [
+                { selectedFragrance: { $exists: false } },
+                { selectedFragrance: null }
+            ]
+        };
 
-        if (modelId) {
-            query["selectedModel.modelId"] = modelId;
-        }
-
-        if (size) {
-            query.selectedSize = size;
-        }
-
-        const wishlistItem = await Wishlist.findOne(query);
+        // Check BOTH
+        const [specificWishlistItem, genericWishlistItem] = await Promise.all([
+            fragrance ? Wishlist.findOne({ ...querySpecific, selectedFragrance: fragrance }) : null,
+            Wishlist.findOne(queryGeneric)
+        ]);
 
         res.json({
-            isInWishlist: !!wishlistItem,
-            wishlistItem: wishlistItem || null
+            isInWishlist: !!(specificWishlistItem || genericWishlistItem),
+            specificWishlistItem, // For product page
+            genericWishlistItem,  // For home page
+            isGenericWishlisted: !!genericWishlistItem,
+            isSpecificWishlisted: !!specificWishlistItem
         });
 
     } catch (err) {
