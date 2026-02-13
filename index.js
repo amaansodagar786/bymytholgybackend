@@ -16,7 +16,7 @@ app.use(express.urlencoded({ extended: true }));
 connectDB();
 
 // ====== IMPORTANT: Static files BEFORE routes ======
-app.use("/api/productsimages", express.static(path.join(__dirname, "productsimages")));
+app.use("/api/productsimages/", express.static(path.join(__dirname, "productsimages")));
 app.use("/categories", express.static(path.join(__dirname, "categories")));
 
 // ROUTES IMPORT
