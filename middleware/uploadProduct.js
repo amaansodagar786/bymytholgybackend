@@ -4,7 +4,7 @@ const path = require("path");
 // storage settings
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "products/"); // save inside ROOT/products folder
+    cb(null, "productsimages/"); // save inside ROOT/products folder
   },
 
   filename: (req, file, cb) => {
