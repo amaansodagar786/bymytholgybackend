@@ -20,7 +20,7 @@ const parseField = (field) => {
 
 // Helper to create full image URL
 const createImageUrl = (req, filename) => {
-  return `${req.protocol}://${req.get("host")}/productsimages/${filename}`;
+  return `${req.protocol}://${req.get("host")}/api/productsimages/${filename}`;
 };
 
 // UPDATED Helper to create inventory entries - Checks for existing entries
