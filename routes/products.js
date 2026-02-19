@@ -747,6 +747,62 @@ router.get("/category/:categoryId/exclude/:productId", async (req, res) => {
       error: error.message
     });
   }
+}); 
+
+
+
+
+// 🟦 GET PRODUCT BY NAME/SLUG - Add this new route
+router.get("/by-name/:productName", async (req, res) => {
+  try {
+    // Get the product name from URL and decode it
+    const productName = req.params.productName;
+    
+    console.log("🔍 Searching for product with name:", productName);
+    
+    // Convert URL format back to readable format
+    // Example: "premium-perfume-100ml" -> "premium perfume 100ml"
+    const searchName = productName
+      .replace(/-/g, ' ')           // Replace hyphens with spaces
+      .replace(/[^\w\s]/g, '')       // Remove any special characters
+      .trim();                        // Remove extra spaces
+    
+    console.log("🔍 Searching for:", searchName);
+    
+    // Find product with case-insensitive search
+    // This will find products where productName matches our search term
+    const product = await Product.findOne({
+      productName: { 
+        $regex: new RegExp(`^${searchName}$`, 'i')  // 'i' makes it case-insensitive
+      },
+      isActive: true  // Only get active products
+    });
+    
+    // If no product found
+    if (!product) {
+      console.log("❌ Product not found with name:", searchName);
+      return res.status(404).json({ 
+        success: false,
+        message: "Product not found" 
+      });
+    }
+    
+    console.log("✅ Product found:", product.productName, "ID:", product.productId);
+    
+    // Return the product data
+    res.json({
+      success: true,
+      product: product
+    });
+    
+  } catch (error) {
+    console.error('❌ Error finding product by name:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error',
+      error: error.message 
+    });
+  }
 });
 
 module.exports = router;
