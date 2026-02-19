@@ -60,7 +60,7 @@ app.use('/admin', adminDashboardRoutes);
 
 // Test route
 app.get("/", (req, res) => {
-  res.send("Backend updated Running...");
+  res.send("BYMYTHOLOGY Backend Running...");
 });
 
 // Error handling middleware
